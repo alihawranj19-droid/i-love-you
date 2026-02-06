@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photo Capture</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 28px;
+        }
+
+        .status {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+
+        #video {
+            width: 100%;
+            max-width: 500px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        #canvas {
+            display: none;
+        }
+
+        #capturedPhoto {
+            width: 100%;
+            max-width: 500px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 16px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-weight: 600;
+            margin: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .error {
+            color: #e74c3c;
+            margin-top: 20px;
+            padding: 15px;
+            background: #ffeaa7;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .countdown {
+            font-size: 72px;
+            font-weight: bold;
+            color: #667eea;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .buttons {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📸 Photo Capture</h1>
+        <p class="status" id="status">Requesting camera access...</p>
+        
+        <div class="countdown" id="countdown"></div>
+        
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas"></canvas>
+        <img id="capturedPhoto" alt="Captured photo">
+        
+        <div class="buttons">
+            <button id="captureBtn" style="display: none;">Take Photo</button>
+            <button id="retakeBtn" style="display: none;">Retake Photo</button>
+            <button id="downloadBtn" style="display: none;">Download Photo</button>
+        </div>
+        
+        <div class="error" id="error"></div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const capturedPhoto = document.getElementById('capturedPhoto');
+        const status = document.getElementById('status');
+        const error = document.getElementById('error');
+        const captureBtn = document.getElementById('captureBtn');
+        const retakeBtn = document.getElementById('retakeBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const countdownEl = document.getElementById('countdown');
+
+        let stream = null;
+
+        // Request camera access when page loads
+        async function initCamera() {
+            // Check if camera is supported
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                error.style.display = 'block';
+                error.textContent = 'Camera not supported. This page must be accessed via HTTPS (secure connection) or localhost.';
+                status.textContent = 'Camera not available';
+                return;
+            }
+
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'user',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    } 
+                });
+                
+                video.srcObject = stream;
+                
+                // Wait for video to be ready
+                video.onloadedmetadata = () => {
+                    video.style.display = 'block';
+                    status.textContent = 'Camera ready! Photo will be taken in 3 seconds...';
+                    captureBtn.style.display = 'inline-block';
+                    
+                    // Auto-capture after 3 seconds with countdown
+                    startCountdown();
+                };
+                
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+                error.style.display = 'block';
+                
+                if (err.name === 'NotAllowedError') {
+                    error.textContent = 'Camera permission denied. Please allow camera access and refresh the page.';
+                } else if (err.name === 'NotFoundError') {
+                    error.textContent = 'No camera found on this device.';
+                } else if (err.name === 'NotReadableError') {
+                    error.textContent = 'Camera is already in use by another application.';
+                } else {
+                    error.textContent = 'Unable to access camera: ' + err.message;
+                }
+                
+                status.textContent = 'Camera access failed';
+            }
+        }
+
+        function startCountdown() {
+            let count = 3;
+            countdownEl.style.display = 'block';
+            countdownEl.textContent = count;
+            
+            const interval = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    countdownEl.textContent = count;
+                } else {
+                    countdownEl.textContent = '📸';
+                    clearInterval(interval);
+                    setTimeout(() => {
+                        countdownEl.style.display = 'none';
+                        capturePhoto();
+                    }, 200);
+                }
+            }, 1000);
+        }
+
+        function capturePhoto() {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            
+            const imageDataUrl = canvas.toDataURL('image/png');
+            capturedPhoto.src = imageDataUrl;
+            capturedPhoto.style.display = 'block';
+            
+            video.style.display = 'none';
+            captureBtn.style.display = 'none';
+            retakeBtn.style.display = 'inline-block';
+            downloadBtn.style.display = 'inline-block';
+            
+            status.textContent = 'Photo captured successfully!';
+            
+            // Stop the camera stream
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        }
+
+        function retakePhoto() {
+            capturedPhoto.style.display = 'none';
+            retakeBtn.style.display = 'none';
+            downloadBtn.style.display = 'none';
+            
+            initCamera();
+        }
+
+        function downloadPhoto() {
+            const link = document.createElement('a');
+            link.download = `photo_${Date.now()}.png`;
+            link.href = capturedPhoto.src;
+            link.click();
+        }
+
+        captureBtn.addEventListener('click', capturePhoto);
+        retakeBtn.addEventListener('click', retakePhoto);
+        downloadBtn.addEventListener('click', downloadPhoto);
+
+        // Initialize camera on page load
+        initCamera();
+    </script>
+</body>
+</html>
